@@ -1,0 +1,13 @@
+{
+  "inactiveChannelId": "1145471009663758533",
+  "phrases": [
+    "brb",
+    "afk",
+    "inactive",
+    "one sec",
+    "be right back",
+    "going afk"
+  ],
+  "caseSensitive": false,
+  "replyMessage": "Moved you to Inactive. Say when you're back!"
+}

@@ -1,0 +1,19 @@
+{
+  "name": "discord-inactive-mover",
+  "version": "1.0.0",
+  "description": "Moves users to an inactive voice channel when they say certain phrases",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": ["discord", "bot", "voice", "inactive"],
+  "license": "MIT",
+  "dependencies": {
+    "discord.js": "^14.14.1",
+    "dotenv": "^16.3.1"
+  }
+}
