@@ -1,12 +1,13 @@
 # Discord Inactive Mover Bot
 
-Moves users to an **Inactive** voice channel when they send certain phrases in any text channel (e.g. "brb", "afk", "inactive").
+Moves users to an **Inactive** voice channel when they **say** certain phrases in voice (e.g. "brb", "afk", "inactive"). The bot listens to voice with speech recognition and reacts to what people say, not to text messages.
 
 ## Requirements
 
 - Node.js 18+
 - A Discord bot token
 - A voice channel to use as "Inactive"
+- **FFmpeg** installed and on your PATH (required for voice by `discord-speech-recognition`)
 
 ## Setup
 
@@ -15,14 +16,14 @@ Moves users to an **Inactive** voice channel when they send certain phrases in a
    - Create a bot, copy the token, and enable **Message Content Intent** under Bot → Privileged Gateway Intents.
 
 2. **Invite the bot**
-   - OAuth2 → URL Generator → Scopes: `bot`; Permissions: **Move Members**, **Connect**, **View Channel**, **Send Messages**, **Read Message History**.
+   - OAuth2 → URL Generator → Scopes: `bot`; Permissions: **Move Members**, **Connect**, **Speak**, **View Channel**, **Send Messages**, **Read Message History**.
    - Open the generated URL and add the bot to your server.
 
 3. **Configure the bot**
    - Copy `.env.example` to `.env` and set `DISCORD_TOKEN=your_bot_token`.
    - In `config.json`:
      - Set `inactiveChannelId` to the **ID** of your Inactive voice channel (right‑click the channel → Copy ID; enable Developer Mode in Discord settings if needed).
-     - Optionally edit `phrases` (trigger words) and `replyMessage`.
+     - Optionally edit `joinCommand` (word users type to summon the bot), `phrases` (spoken trigger words), and `replyMessage`.
 
 4. **Install and run**
    ```bash
@@ -30,20 +31,21 @@ Moves users to an **Inactive** voice channel when they send certain phrases in a
    npm start
    ```
 
+## How it works (voice, not messages)
+
+- Someone in a voice channel types the **join command** in chat (default: `join`). The bot joins that voice channel and starts listening.
+- When anyone in that channel **says** one of the trigger phrases (e.g. "brb", "afk", "inactive"), the bot moves that speaker to the Inactive voice channel and can send them a DM.
+- Matching is based on **speech recognition** of what people say in voice; it does not react to typed messages.
+
 ## Config
 
 | Option              | Description |
 |---------------------|-------------|
 | `inactiveChannelId` | Voice channel ID to move users to. |
-| `phrases`           | Array of phrases that trigger a move (e.g. `["brb", "afk", "inactive"]`). |
-| `caseSensitive`    | If `false`, matching is case‑insensitive. |
-| `replyMessage`     | Message the bot sends after moving the user. |
-
-## Behavior
-
-- User must be in a **voice channel** when they send a phrase; otherwise the bot replies that they need to be in voice.
-- The bot checks if the message contains any of the configured phrases (as whole words).
-- If the user is in voice and the phrase matches, the bot moves them to the Inactive channel and sends the reply message.
+| `joinCommand`       | Chat command to make the bot join your voice channel and start listening (default: `join`). |
+| `phrases`           | Spoken phrases that trigger a move (e.g. `["brb", "afk", "inactive"]`). |
+| `caseSensitive`     | If `false`, matching is case‑insensitive. |
+| `replyMessage`      | Message the bot sends (e.g. by DM) after moving the user. |
 
 ## Optional: run with auto-restart
 

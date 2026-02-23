@@ -1,5 +1,7 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits } = require('discord.js');
+const { Client, GatewayIntentBits, Events } = require('discord.js');
+const { joinVoiceChannel } = require('@discordjs/voice');
+const { addSpeechEvent, SpeechEvents } = require('discord-speech-recognition');
 const fs = require('fs');
 const path = require('path');
 
@@ -19,12 +21,16 @@ try {
   process.exit(1);
 }
 
-const { inactiveChannelId, phrases, caseSensitive, replyMessage } = config;
+const { inactiveChannelId, phrases, caseSensitive, replyMessage, joinCommand } = config;
 const phraseSet = new Set(
   (phrases || []).map((p) => (caseSensitive ? p : p.toLowerCase()))
 );
 
-function messageMatchesPhrases(content) {
+// When the bot receives speech, we need to know which guild it's from.
+// The library emits speech in the context of the bot's current voice connection.
+let currentGuildId = null;
+
+function spokenContentMatchesPhrases(content) {
   if (!content || typeof content !== 'string') return false;
   const normalized = caseSensitive ? content : content.toLowerCase();
   const words = normalized.split(/\s+/);
@@ -32,7 +38,9 @@ function messageMatchesPhrases(content) {
     const trimmed = word.replace(/[^\w\s-]/g, '');
     if (phraseSet.has(trimmed)) return true;
   }
-  return phraseSet.has(normalized.trim()) || phraseSet.has(normalized.replace(/[^\w\s-]/g, '').trim());
+  const full = normalized.trim();
+  const fullNoPunct = full.replace(/[^\w\s-]/g, '').trim();
+  return phraseSet.has(full) || phraseSet.has(fullNoPunct);
 }
 
 const client = new Client({
@@ -45,44 +53,68 @@ const client = new Client({
   ],
 });
 
+addSpeechEvent(client);
+
 client.once('ready', () => {
   console.log(`Logged in as ${client.user.tag}`);
   if (!inactiveChannelId || inactiveChannelId === 'YOUR_INACTIVE_VOICE_CHANNEL_ID') {
     console.warn('Set inactiveChannelId in config.json to your Inactive voice channel ID.');
   }
+  const cmd = joinCommand || 'join';
+  console.log(`Say "${cmd}" in chat (while in a voice channel) to make the bot join and start listening.`);
 });
 
-client.on('messageCreate', async (message) => {
+// Summon the bot: user types the join command while in a voice channel → bot joins to listen
+client.on(Events.MessageCreate, async (message) => {
   if (message.author.bot) return;
-  if (!messageMatchesPhrases(message.content)) return;
+  const trigger = (joinCommand || 'join').trim().toLowerCase();
+  const content = message.content.trim().toLowerCase();
+  if (content !== trigger) return;
 
-  const member = message.member;
-  if (!member?.voice?.channel) {
-    await message.reply("You're not in a voice channel. Join one and say a phrase to be moved to Inactive.");
-    return;
-  }
-
-  const guild = message.guild;
-  const targetChannel = guild.channels.cache.get(inactiveChannelId);
-  if (!targetChannel) {
-    await message.reply("Inactive channel is not configured or doesn't exist. Check config.json.");
-    return;
-  }
-  if (targetChannel.type !== 2 && targetChannel.type !== 13) {
-    await message.reply("Configured inactive channel is not a voice channel.");
-    return;
-  }
-  if (member.voice.channelId === inactiveChannelId) {
-    await message.reply("You're already in the Inactive channel.");
+  const voiceChannel = message.member?.voice?.channel;
+  if (!voiceChannel) {
+    await message.reply('Join a voice channel first, then send that command so I can join and listen.');
     return;
   }
 
   try {
+    joinVoiceChannel({
+      channelId: voiceChannel.id,
+      guildId: voiceChannel.guild.id,
+      adapterCreator: voiceChannel.guild.voiceAdapterCreator,
+      selfDeaf: false,
+    });
+    currentGuildId = voiceChannel.guild.id;
+    await message.reply(`Joined **${voiceChannel.name}**. I'll move anyone who says the trigger phrases (e.g. brb, afk) to the Inactive channel.`);
+  } catch (err) {
+    console.error('Join voice failed:', err);
+    await message.reply("I couldn't join the voice channel. Check my permissions (Connect, Speak).");
+  }
+});
+
+// React to what people *say* in voice (speech → move to inactive)
+client.on(SpeechEvents.speech, async (msg) => {
+  if (!msg.content) return;
+  const guildId = currentGuildId || msg.guild?.id;
+  if (!guildId) return;
+  const guild = client.guilds.cache.get(guildId);
+  if (!guild) return;
+  const member = guild.members.cache.get(msg.author.id);
+  if (!member?.voice?.channel) return;
+  if (!spokenContentMatchesPhrases(msg.content)) return;
+
+  const targetChannel = guild.channels.cache.get(inactiveChannelId);
+  if (!targetChannel) return;
+  const isVoice = targetChannel.type === 2 || targetChannel.type === 13;
+  if (!isVoice) return;
+  if (member.voice.channelId === inactiveChannelId) return;
+
+  try {
     await member.voice.setChannel(targetChannel);
-    await message.reply(replyMessage || "Moved you to Inactive.");
+    const text = replyMessage || "Moved you to Inactive.";
+    await member.send(text).catch(() => {});
   } catch (err) {
     console.error('Move failed:', err);
-    await message.reply("I don't have permission to move you, or the channel is full.");
   }
 });
 
